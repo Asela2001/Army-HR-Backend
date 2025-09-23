@@ -27,6 +27,7 @@ import { Mission } from './entities/mission.entity';
 import { EmpAward } from './entities/emp-award.entity';
 import { EmpMission } from './entities/emp-mission.entity';
 import { EmployeeModule } from './employee/employee.module';
+import { MasterModule } from './master/master.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { EmployeeModule } from './employee/employee.module';
       synchronize: false,
     }),
     EmployeeModule,
+    MasterModule,
   ],
   controllers: [AppController],
   providers: [AppService],
