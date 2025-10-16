@@ -40,6 +40,13 @@ import { UpdateEmpAwardDto } from './dto/update-emp-award.dto';
 import { CreateEmpAwardDto } from './dto/create-emp-award.dto';
 import { UpdateEmpMedicalDto } from './dto/update-emp-medical.dto';
 import { CreateEmpMedicalDto } from './dto/create-emp-medical.dto';
+import {
+  ExpiringItem,
+  GenderStats,
+  PromotedEmployee,
+} from './interfaces/expiring-item.interface';
+
+
 
 @Injectable()
 export class EmployeeService {
@@ -260,7 +267,6 @@ export class EmployeeService {
     console.log('Deleting contact entity:', contact);
     await this.contactRepository.remove(contact);
   }
-
 
   // for service records
   async findAllServices(emp_no: string): Promise<Service[]> {
@@ -748,4 +754,514 @@ export class EmployeeService {
     const emp = await this.employeeRepository.findOne({ where: { emp_no } });
     if (!emp) throw new NotFoundException(`Employee ${emp_no} not found`);
   }
+
+  // for dashboard - expiring medical histories
+  async findNearlyExpiringMedical(): Promise<ExpiringItem[]> {
+    const currentDate = new Date(); // October 16, 2025
+    const thirtyDaysFromNow = new Date(
+      currentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
+
+    // Format dates as 'YYYY-MM-DD' for TO_DATE
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+    const medicalHistories = await this.medicalHistoryRepository
+      .createQueryBuilder('mh')
+      .innerJoinAndSelect('mh.health', 'health')
+      .innerJoinAndSelect('health.employee', 'emp')
+      .where(
+        "mh.expire_date BETWEEN TO_DATE(:currentDate, 'YYYY-MM-DD') AND TO_DATE(:thirtyDaysFromNow, 'YYYY-MM-DD')",
+        {
+          currentDate: currentDateStr,
+          thirtyDaysFromNow: thirtyDaysStr,
+        },
+      )
+      // Removed: .andWhere('mh.status = :status', { status: 'ACTIVE' }) - Data uses 'normal'; add back with correct value if needed
+      .orderBy('mh.expire_date', 'ASC')
+      .getMany();
+
+    // Log for debugging (remove in production)
+    console.log(
+      `Found ${medicalHistories.length} nearly expiring medical records for dates ${currentDateStr} to ${thirtyDaysStr}`,
+    );
+    medicalHistories.forEach((mh) =>
+      console.log(
+        `MH: ${mh.mh_id}, Expire: ${mh.expire_date}, Status: ${mh.status}`,
+      ),
+    );
+
+    return medicalHistories.map((mh) => {
+      const expiry = new Date(mh.expire_date);
+      const daysLeft = Math.ceil(
+        (expiry.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      // Use emp_no since employee details may not load; adjust if relation works
+      const employeeId = mh.health.emp_no || 'Unknown';
+      const description = mh.health.blood_group
+        ? `Blood Group: ${mh.health.blood_group}`
+        : 'Medical History';
+      return {
+        id: mh.mh_id,
+        name: `${employeeId} - ${description}`,
+        expiryDate: expiry.toISOString().split('T')[0],
+        daysLeft: Math.max(0, daysLeft),
+      };
+    });
+  }
+
+  async findNearlyExpiringSecurity(): Promise<ExpiringItem[]> {
+    const currentDate = new Date(); // October 16, 2025
+    const thirtyDaysFromNow = new Date(
+      currentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
+
+    // Format dates as 'YYYY-MM-DD' for TO_DATE
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+    const securities = await this.securityRepository
+      .createQueryBuilder('sec')
+      .innerJoinAndSelect('sec.employee', 'emp')
+      .where(
+        "sec.expire_date BETWEEN TO_DATE(:currentDate, 'YYYY-MM-DD') AND TO_DATE(:thirtyDaysFromNow, 'YYYY-MM-DD')",
+        {
+          currentDate: currentDateStr,
+          thirtyDaysFromNow: thirtyDaysStr,
+        },
+      )
+      .orderBy('sec.expire_date', 'ASC')
+      .getMany();
+
+    // Log for debugging (remove in production)
+    console.log(
+      `Found ${securities.length} nearly expiring security records for dates ${currentDateStr} to ${thirtyDaysStr}`,
+    );
+    securities.forEach((sec) =>
+      console.log(
+        `Security: ${sec.security_id}, Expire: ${sec.expire_date}, Level: ${sec.s_level}`,
+      ),
+    );
+
+    return securities.map((sec) => {
+      const expiry = new Date(sec.expire_date);
+      const daysLeft = Math.ceil(
+        (expiry.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const employeeFullName =
+        `${sec.employee.first_name || ''} ${sec.employee.last_name || ''}`.trim() ||
+        sec.emp_no ||
+        'Unknown Employee';
+      const description = sec.s_level
+        ? `Security Level: ${sec.s_level}`
+        : 'Security Clearance';
+      return {
+        id: sec.security_id,
+        name: `${employeeFullName} - ${description}`,
+        expiryDate: expiry.toISOString().split('T')[0],
+        daysLeft: Math.max(0, daysLeft),
+      };
+    });
+  }
+
+  async findNearlyExpiringAwards(): Promise<ExpiringItem[]> {
+    const currentDate = new Date(); // October 16, 2025
+    const thirtyDaysFromNow = new Date(
+      currentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
+
+    // Format dates as 'YYYY-MM-DD' for TO_DATE
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+    const awards = await this.empAwardRepository
+      .createQueryBuilder('award')
+      .innerJoinAndSelect('award.employee', 'emp')
+      .innerJoinAndSelect('award.award', 'a') // Assuming EmpAward has @ManyToOne(() => Award) award: Award;
+      .where(
+        "award.expire_date BETWEEN TO_DATE(:currentDate, 'YYYY-MM-DD') AND TO_DATE(:thirtyDaysFromNow, 'YYYY-MM-DD')",
+        {
+          currentDate: currentDateStr,
+          thirtyDaysFromNow: thirtyDaysStr,
+        },
+      )
+      .orderBy('award.expire_date', 'ASC')
+      .getMany();
+
+    // Log for debugging (remove in production)
+    console.log(
+      `Found ${awards.length} nearly expiring awards for dates ${currentDateStr} to ${thirtyDaysStr}`,
+    );
+
+    return awards.map((award) => {
+      const expiry = new Date(award.expire_date);
+      const daysLeft = Math.ceil(
+        (expiry.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const employeeFullName =
+        `${award.employee.first_name || ''} ${award.employee.last_name || ''}`.trim() ||
+        award.emp_no ||
+        'Unknown Employee';
+      const description = award.award?.name || 'Award'; // Removed non-existent 'award_name'
+      return {
+        id: award.award_id,
+        name: `${employeeFullName} - ${description}`,
+        expiryDate: expiry.toISOString().split('T')[0],
+        daysLeft: Math.max(0, daysLeft),
+      };
+    });
+  }
+
+  async findNearlyExpiringMissions(): Promise<ExpiringItem[]> {
+    const currentDate = new Date(); // October 16, 2025
+    const thirtyDaysFromNow = new Date(
+      currentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
+
+    // Format dates as 'YYYY-MM-DD' for TO_DATE
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+    const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0];
+
+    const missions = await this.empMissionRepository
+      .createQueryBuilder('mission')
+      .innerJoinAndSelect('mission.employee', 'emp')
+      .innerJoinAndSelect('mission.mission', 'm')
+      .where(
+        "mission.expire_date BETWEEN TO_DATE(:currentDate, 'YYYY-MM-DD') AND TO_DATE(:thirtyDaysFromNow, 'YYYY-MM-DD')",
+        {
+          currentDate: currentDateStr,
+          thirtyDaysFromNow: thirtyDaysStr,
+        },
+      )
+      .orderBy('mission.expire_date', 'ASC')
+      .getMany();
+
+    // Log for debugging (remove in production)
+    console.log(
+      `Found ${missions.length} nearly expiring missions for dates ${currentDateStr} to ${thirtyDaysStr}`,
+    );
+
+    return missions.map((mission) => {
+      const expiry = new Date(mission.expire_date);
+      const daysLeft = Math.ceil(
+        (expiry.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const employeeFullName =
+        `${mission.employee.first_name || ''} ${mission.employee.last_name || ''}`.trim() ||
+        mission.emp_no ||
+        'Unknown Employee';
+      const description = mission.mission?.name || 'Mission'; // Removed non-existent 'mission_name'
+      return {
+        id: mission.mission_id,
+        name: `${employeeFullName} - ${description}`,
+        expiryDate: expiry.toISOString().split('T')[0],
+        daysLeft: Math.max(0, daysLeft),
+      };
+    });
+  }
+
+  async findGenderStats(): Promise<GenderStats> {
+    const [maleResult, femaleResult] = await Promise.all([
+      this.employeeRepository
+        .createQueryBuilder('emp')
+        .where('emp.gender = :gender', { gender: 'M' }) // Adjust 'M'/'F' or 'Male'/'Female' based on your Employee entity values
+        .getCount(),
+      this.employeeRepository
+        .createQueryBuilder('emp')
+        .where('emp.gender = :gender', { gender: 'F' })
+        .getCount(),
+    ]);
+
+    return {
+      maleCount: maleResult,
+      femaleCount: femaleResult,
+    };
+  }
+
+  async findPromotionsLastYear(): Promise<PromotedEmployee[]> {
+    const currentDate = new Date(); // October 16, 2025
+    const oneYearAgo = new Date(
+      currentDate.getTime() - 365 * 24 * 60 * 60 * 1000,
+    );
+
+    // Format dates as 'YYYY-MM-DD' for TO_DATE
+    const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+
+    const promotions = await this.promotionRepository
+      .createQueryBuilder('promo')
+      .innerJoinAndSelect('promo.service', 'service')
+      .innerJoinAndSelect('service.employee', 'emp')
+      .where(
+        "promo.a_date BETWEEN TO_DATE(:oneYearAgo, 'YYYY-MM-DD') AND TO_DATE(:currentDate, 'YYYY-MM-DD')",
+        {
+          oneYearAgo: oneYearAgoStr,
+          currentDate: currentDateStr,
+        },
+      )
+      .orderBy('promo.a_date', 'DESC') // Most recent first
+      .getMany();
+
+    // Log for debugging (remove in production)
+    console.log(`Found ${promotions.length} promotions in the last year`);
+
+    return promotions.map((promo) => {
+      const promotionDate = new Date(promo.a_date);
+      const employeeFullName =
+        `${promo.service.employee.first_name || ''} ${promo.service.employee.last_name || ''}`.trim() ||
+        promo.service.employee.emp_no ||
+        'Unknown Employee';
+      return {
+        id: promo.promotion_id,
+        name: employeeFullName,
+        promotionDate: promotionDate.toISOString().split('T')[0],
+      };
+    });
+  }
+
+  // // Enhanced Bulk create from Excel (handles nested/flat fields)
+  // async bulkCreate(bulkData: any[]): Promise<any[]> {
+  //   const results: Array<{
+  //     success: boolean;
+  //     emp_no: string;
+  //     sections: Record<string, any>;
+  //     error?: string;
+  //   }> = [];
+  //   for (const row of bulkData as Record<string, unknown>[]) {
+  //     const result: {
+  //       success: boolean;
+  //       emp_no: string;
+  //       sections: Record<string, any>;
+  //       error?: string;
+  //     } = {
+  //       success: false,
+  //       emp_no: row.emp_no as string || 'Unknown',
+  //       sections: {},
+  //     };
+  //     try {
+  //       // 1. Create Basic Employee
+  //       const basicDto = {
+  //         emp_no: row.emp_no,
+  //         nic_no: row.nic_no,
+  //         passport_no: row.passport_no,
+  //         first_name: row.first_name,
+  //         last_name: row.last_name,
+  //         dob: row.dob,
+  //         gender: row.gender,
+  //         religion: row.religion,
+  //         nationality: row.nationality,
+  //       };
+  //       const employee = await this.create(basicDto);
+  //       result.sections.employee = { success: true, data: employee };
+  //       const empNo = employee.emp_no;
+
+  //       // 2. Family (if fields present)
+  //       if (row.family_id || row.marital_status) {
+  //         try {
+  //           const familyDto = {
+  //             emp_no, // Added: Required by CreateFamilyDto
+  //             family_id: row.family_id,
+  //             marital_status: row.marital_status,
+  //             spouse_name: row.spouse_name,
+  //             number_of_children: row.number_of_children || 0,
+  //           };
+  //           const family = await this.createFamily(empNo, familyDto);
+  //           result.sections.family = { success: true, data: family };
+  //         } catch (err) {
+  //           result.sections.family = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 3. Contact (if fields present)
+  //       if (row['contact.contact_id'] || row['contact.telephone']) {
+  //         try {
+  //           const contactDto = {
+  //             emp_no, // Added: Required by CreateContactDto
+  //             contact_id: row['contact.contact_id'],
+  //             telephone: row['contact.telephone'],
+  //             email: row['contact.email'],
+  //             address: row['contact.address'],
+  //           };
+  //           const contact = await this.createContact(empNo, contactDto);
+  //           result.sections.contact = { success: true, data: contact };
+  //         } catch (err) {
+  //           result.sections.contact = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 4. Service (if fields present)
+  //       let serviceId: string | null = null;
+  //       if (row['service.service_id'] || row['service.service_no']) {
+  //         try {
+  //           const serviceDto = {
+  //             emp_no, // Added: Required by CreateServiceDto
+  //             service_id: row['service.service_id'],
+  //             service_no: row['service.service_no'],
+  //             regiment_id: row['service.regiment_id'],
+  //             unit_id: row['service.unit_id'],
+  //             rank_id: row['service.rank_id'],
+  //           };
+  //           const service = await this.createService(empNo, serviceDto);
+  //           serviceId = service.service_id;
+  //           result.sections.service = { success: true, data: service };
+  //         } catch (err) {
+  //           result.sections.service = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 5. Promotion (if fields & serviceId present)
+  //       if (
+  //         serviceId &&
+  //         (row['promotion.promotion_id'] || row['promotion.rank_id'])
+  //       ) {
+  //         try {
+  //           const promotionDto = {
+  //             promotion_id: row['promotion.promotion_id'],
+  //             service_id: serviceId,
+  //             rank_id: row['promotion.rank_id'],
+  //             appointment_id: row['promotion.appointment_id'],
+  //             a_date: row['promotion.a_date'],
+  //             reason: row['promotion.reason'],
+  //           };
+  //           const promotion = await this.createPromotion(empNo, promotionDto);
+  //           result.sections.promotion = { success: true, data: promotion };
+  //         } catch (err) {
+  //           result.sections.promotion = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 6. Posting (similar to Promotion)
+  //       if (
+  //         serviceId &&
+  //         (row['posting.posting_id'] || row['posting.unit_id'])
+  //       ) {
+  //         try {
+  //           const postingDto = {
+  //             posting_id: row['posting.posting_id'],
+  //             service_id: serviceId,
+  //             unit_id: row['posting.unit_id'],
+  //             rank_id: row['posting.rank_id'],
+  //             regiment_id: row['posting.regiment_id'],
+  //             appointment_id: row['posting.appointment_id'],
+  //             p_date: row['posting.p_date'],
+  //           };
+  //           const posting = await this.createPosting(empNo, postingDto);
+  //           result.sections.posting = { success: true, data: posting };
+  //         } catch (err) {
+  //           result.sections.posting = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 7. Health (if fields)
+  //       let healthId: string | null = null;
+  //       if (row['health.health_id'] || row['health.blood_group']) {
+  //         try {
+  //           const healthDto = {
+  //             emp_no, // Added: Required by CreateHealthDto
+  //             health_id: row['health.health_id'],
+  //             blood_group: row['health.blood_group'],
+  //             height: row['health.height'],
+  //             weight: row['health.weight'],
+  //             bmi: row['health.bmi'],
+  //             fitness_id: row['health.fitness_id'],
+  //           };
+  //           const health = await this.createHealth(empNo, healthDto);
+  //           healthId = health.health_id;
+  //           result.sections.health = { success: true, data: health };
+  //         } catch (err) {
+  //           result.sections.health = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 8. Medical History (if fields & healthId)
+  //       if (
+  //         healthId &&
+  //         (row['medical_history.mh_id'] || row['medical_history.check_date'])
+  //       ) {
+  //         try {
+  //           const mhDto = {
+  //             mh_id: row['medical_history.mh_id'],
+  //             health_id: healthId,
+  //             check_date: row['medical_history.check_date'],
+  //             expire_date: row['medical_history.expire_date'],
+  //             status: row['medical_history.status'],
+  //           };
+  //           const mh = await this.createMedicalHistory(empNo, mhDto);
+  //           result.sections.medical_history = { success: true, data: mh };
+  //         } catch (err) {
+  //           result.sections.medical_history = {
+  //             success: false,
+  //             error: err.message,
+  //           };
+  //         }
+  //       }
+
+  //       // 9. Payment (if fields)
+  //       if (row['payment.payment_id'] || row['payment.pay_code']) {
+  //         try {
+  //           const paymentDto = {
+  //             emp_no, // Added: Required by CreatePaymentDto
+  //             payment_id: row['payment.payment_id'],
+  //             pay_code: row['payment.pay_code'],
+  //             basic_pay: row['payment.basic_pay'],
+  //             bank_acc_no: row['payment.bank_acc_no'],
+  //             insurance_no: row['payment.insurance_no'],
+  //             epf_no: row['payment.epf_no'],
+  //             allowance_id: row['payment.allowance_id'],
+  //             loan_id: row['payment.loan_id'],
+  //           };
+  //           const payment = await this.createPayment(empNo, paymentDto);
+  //           result.sections.payment = { success: true, data: payment };
+  //         } catch (err) {
+  //           result.sections.payment = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // 10. Security (if fields)
+  //       if (row['security.security_id'] || row['security.s_level']) {
+  //         try {
+  //           const securityDto = {
+  //             emp_no, // Added: Required by CreateSecurityDto
+  //             security_id: row['security.security_id'],
+  //             s_level: row['security.s_level'] as string | undefined,
+  //             issue_date: row['security.issue_date'],
+  //             expire_date: row['security.expire_date'],
+  //             clearance_id: row['security.clearance_id'],
+  //           };
+  //           const security = await this.createSecurity(empNo, securityDto);
+  //           result.sections.security = { success: true, data: security };
+  //         } catch (err) {
+  //           result.sections.security = { success: false, error: err.message };
+  //         }
+  //       }
+
+  //       // Arrays: Skip (not supported)
+  //       if (row.emp_award || row.emp_medical || row.emp_mission) {
+  //         result.sections.arrays = {
+  //           success: false,
+  //           note: 'Arrays not supported in bulk; use manual form.',
+  //         };
+  //       }
+
+  //       result.success = Object.values(result.sections).every(
+  //         (sec: any) =>
+  //           typeof sec === 'object' &&
+  //           sec !== null &&
+  //           'success' in sec &&
+  //           sec.success !== false,
+  //       );
+  //       results.push(result);
+  //     } catch (err) {
+  //       result.error =
+  //         err && typeof err === 'object' && 'message' in err
+  //           ? String((err as { message?: unknown }).message)
+  //           : String(err);
+  //       results.push(result);
+  //     }
+  //   }
+  //   console.log(
+  //     `Bulk create completed: ${results.filter((r) => r.success).length} full successes`,
+  //   );
+  //   return results;
+  // }
 }

@@ -34,6 +34,9 @@ import { CreateEmpMedicalDto } from './dto/create-emp-medical.dto';
 import { UpdateEmpMedicalDto } from './dto/update-emp-medical.dto';
 import { CreateSecurityDto } from './dto/create-security.dto';
 import { UpdateSecurityDto } from './dto/update-security.dto';
+import { ExpiringItem } from './interfaces/expiring-item.interface';
+import { GenderStats } from './interfaces/expiring-item.interface';
+import { PromotedEmployee } from './interfaces/expiring-item.interface';
 
 @Controller('employee')
 export class EmployeeController {
@@ -180,6 +183,7 @@ export class EmployeeController {
   }
 
   // for Helth records
+
   @Get(':emp_no/health')
   findAllHealth(@Param('emp_no') emp_no: string) {
     return this.employeeService.findAllHealth(emp_no);
@@ -494,4 +498,39 @@ export class EmployeeController {
   ) {
     return this.employeeService.deleteEmpMission(emp_no, mission_id);
   }
+
+  // for dashboard
+  @Get('dashboard/nearly-expiring-medical')
+  findNearlyExpiringMedical(): Promise<ExpiringItem[]> {
+    return this.employeeService.findNearlyExpiringMedical();
+  }
+
+  @Get('dashboard/nearly-expiring-security')
+  findNearlyExpiringSecurity(): Promise<ExpiringItem[]> {
+    return this.employeeService.findNearlyExpiringSecurity();
+  }
+
+  @Get('dashboard/nearly-expiring-awards')
+  findNearlyExpiringAwards(): Promise<ExpiringItem[]> {
+    return this.employeeService.findNearlyExpiringAwards();
+  }
+
+  @Get('dashboard/nearly-expiring-missions')
+  findNearlyExpiringMissions(): Promise<ExpiringItem[]> {
+    return this.employeeService.findNearlyExpiringMissions();
+  }
+
+  @Get('dashboard/gender-stats')
+  findGenderStats(): Promise<GenderStats> {
+    return this.employeeService.findGenderStats();
+  }
+
+  @Get('dashboard/promotions-last-year')
+  findPromotionsLastYear(): Promise<PromotedEmployee[]> {
+    return this.employeeService.findPromotionsLastYear();
+  }
+  // @Post('bulk')
+  // bulkCreate(@Body() employees: CreateEmployeeDto[]) {
+  //   return this.employeeService.bulkCreate(employees);
+  // }
 }

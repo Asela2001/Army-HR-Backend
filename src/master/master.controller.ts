@@ -26,8 +26,6 @@ import { UpdateSecurityClearanceDto } from './dto/update-security-clearance.dto'
 import { CreateSecurityClearanceDto } from './dto/create-security-clearance.dto';
 import { CreateMedicalDto } from './dto/create-medical.dto';
 import { UpdateMedicalDto } from './dto/update-medical.dto';
-import { Mission } from 'src/entities/mission.entity';
-import { Award } from 'src/entities/award.entity';
 import { CreateAwardDto } from './dto/create-award.dto';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { UpdateMissionDto } from './dto/update-mission.dto';
